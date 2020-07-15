@@ -1,37 +1,145 @@
-from numpy import *
+import numpy as np
 import operator
+import os
 
-# 创建一个数据集，包含2个类别共4个样本
-def createDataSet():
-    # 生成一个矩阵，每行表示一个样本
-    group = array([[2.0, 1.8], [1.9, 2.0], [0.1, 0.1], [0.2, 0.0]])
-    # 4个样本分别所属的类别
-    labels = ['m', 'm', 'n', 'n']
+
+def create_dataSet():
+    group = np.array([[1, 1.1], [1, 1], [0, 0], [0, 0.1]])
+    labels = ['A', 'A', 'B', 'B']
     return group, labels
 
-# KNN分类算法函数
-def kNNClassify(newInput, dataSet, labels, k):
-    numSamples = dataSet.shape[0]   # shape[0]表示行数
 
-    # #计算距离
-    diff = tile(newInput, (numSamples, 1)) - dataSet  # 按元素求差值
-    squaredDiff = diff ** 2  # 将差值平方
-    squaredDist = sum(squaredDiff, axis = 1)   # 累加
-    distance = squaredDist ** 0.5  # 将差值平方和求开方得到距离
+def classify0(in_x, data_set, labels, k):
+    data_set_size = data_set.shape[0]
+    diff_mat = np.tile(in_x, (data_set_size, 1)) - data_set
+    dist = (diff_mat**2).sum(axis=1)**0.5
+    sorted_dist_index = dist.argsort()
+    class_count = {}
+    for i in range(k):
+        votelabel = labels[sorted_dist_index[i]]
+        class_count[votelabel] = class_count.get(votelabel, 0) + 1
+    sorted_class_count = sorted(class_count.items(), key=operator.itemgetter(1), reverse=True)
+    return sorted_class_count[0][0]
 
-    # # 对距离排序
-    sortedDistIndices = argsort(distance)
-    classCount = {} # define a dictionary (can be append element)
-    for i in xrange(k):        #  选择k个最近邻
-        voteLabel = labels[sortedDistIndices[i]]
-        # #  计算k个最近邻中各类别出现的次数
-        classCount[voteLabel] = classCount.get(voteLabel, 0) + 1
 
-    # # 返回出现次数最多的类别标签
-    maxCount = 0
-    for key, value in classCount.items():
-        if value > maxCount:
-            maxCount = value
-            result = key
+# dating数据
+def file2matrix(filename):
+    file_path = r'C:\Users\Administrator\Desktop\ML\machinelearninginaction-master\machinelearninginaction-master\Ch02'
+    fr = open(file_path + filename)
+    ar_lines = fr.readlines()
+    num = len(ar_lines)
+    return_mat = np.zeros((num, 3))
+    class_label = []
+    index = 0
+    for line in ar_lines:
+        line = line.strip().split('\t')
+        return_mat[index, :] = line[0:3]
+        # class_label.append(int(line[-1]))
+        if line[-1] == 'largeDoses':
+            class_label.append(3)
+        elif line[-1] == 'didntLike':
+            class_label.append(2)
+        else:
+            class_label.append(1)
+        index += 1
+    return return_mat, class_label
 
-    return result
+
+# 归一化特征值
+def auto_norm(data_set):
+    min_val = data_set.min(0)  # 行对比，得到n列最小的值
+    max_val = data_set.max(0)
+    ranges = max_val - min_val
+    norm_data_set = np.zeros(np.shape(data_set))
+    m = data_set.shape[0]
+    norm_data_set = data_set - np.tile(min_val, (m, 1))
+    norm_data_set = norm_data_set/np.tile(ranges, (m, 1))
+    return norm_data_set, ranges, min_val
+
+
+# # 分类器针对约会网站的测试代码
+def dating_class_test():
+    h = 0.1
+    dating_data_mat, dating_labels = file2matrix('/datingTestSet.txt')
+    norm_mat, ranges, min_val = auto_norm(dating_data_mat)
+    m = norm_mat.shape[0]
+    num_test_vect = int(m*h)
+    error_count = 0.0
+    for i in range(num_test_vect):
+        classify_result = classify0(norm_mat[i,:], dating_data_mat[num_test_vect:, :], dating_labels[num_test_vect:], 3)
+        print("the classifier come back with: %d, the real answer is : %d" %(int(classify_result), int(dating_labels[i])))
+        if classify_result != dating_labels[i]: error_count += 1
+    print("the total error rate is: %.2f%%" % (error_count*100/float(num_test_vect)))
+
+
+def classify_preson():
+    result_list = ['not at all', 'in small does', 'in large does']
+    percent_tats = float(input("percentage of time spent playing video games:"))
+    ff_miles = float(input("frequent flier miles earned games:"))
+    ice_cream = float(input("liters of ice cream consumed per year:"))
+    dating_mat, dating_labels = file2matrix('/datingTestSet.txt')
+    norm_mat, ranges, min_val = auto_norm(dating_mat)
+    in_x = np.array((percent_tats, ff_miles, ice_cream))
+    classifier_result = classify0(in_x, norm_mat, dating_labels, 3)
+    print("you will probably like this person:", result_list[classifier_result - 1])
+
+
+# 导入手写数字文件
+def img2vector(filename):
+    filepath = r'C:\Users\Administrator\Desktop\ML\machinelearninginaction-master\machinelearninginaction-master\Ch02\digits\trainingDigits'
+    fr = open(filepath + filename)
+    return_vect = []
+    for i in fr.readlines():
+            for j in i.strip():
+                return_vect.append(int(j))
+    # return_vect = np.array(return_vect).reshape(32, 32)
+    return_vect = np.array(return_vect)
+    return return_vect
+
+
+def handwriteing_classtest():
+    filepath = r'C:\Users\Administrator\Desktop\ML\machinelearninginaction-master\machinelearninginaction-master\Ch02\digits'
+    hw_labels = []
+    training_filelist = os.listdir(filepath + '/trainingDigits')
+    m = len(training_filelist)
+    training_mat = np.zeros((m, 1024))
+    for i in range(m):
+        filename_str = training_filelist[i]
+        file_str = filename_str.split('.')[0]
+        class_num = int(file_str.split('_')[0])
+        hw_labels.append(class_num)
+        training_mat[i, :] = img2vector('/%s' % filename_str)
+    test_filelist = os.listdir(filepath + '/testDigits')
+    error_count = 0.0
+    m_t = len(test_filelist)
+    for i in range(m_t):
+        filename_str = test_filelist[i]
+        class_num = int(filename_str.split('.')[0].split('_')[0])
+        vector_undertest = img2vector('/%s' % filename_str)
+        classifierresult = classify0(vector_undertest, training_mat, hw_labels, 3)
+        print("the classifier came back with: %d, the real answer is: %d"%(classifierresult, class_num))
+        if (classifierresult != class_num): error_count += 1.0
+    print("\nthe total number of errors is: %d" %error_count)
+    print("\nthe total error rate is: %f" %(error_count/float(m_t)))
+
+
+################测试的代码：
+
+def test():
+    from imp import reload  # 重新导入模块
+    from matplotlib import pyplot as plt
+    plt.scatter(group[:,0], group[:,1])
+    reload(KNN)
+    datingDataMat, datingLabels = KNN.file2matrix(r'C:\Users\Administrator\Desktop\ML\machinelearninginaction-master\machinelearninginaction-master\Ch02\datingTestSet2.txt')
+    plt.scatter(datingDataMat[:,1], datingDataMat[:,2])
+    plt.scatter(x = datingDataMat[:,1], y = datingDataMat[:,2], c = np.array(datingLabels), s =np.array(datingLabels))
+
+
+
+
+
+
+
+
+
+
